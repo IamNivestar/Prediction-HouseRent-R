@@ -1,12 +1,16 @@
+##### Amaury Ribeiro 
+#### https://github.com/IamNivestar/Prediction-HouseRent-R
+#### Predição de aluguel
+
 
 #carregando base de dados
 
-setwd("C:/Users/Amaury/Desktop/house_rent_prediction_model")
+setwd("C:/Users/Amaury/Desktop/Prediction-HouseRent-R")
 df <- read.csv("House_Rent_Dataset.csv", header = TRUE, encoding = "UTF-8")
 View(df)
 str(df)
 
-# Limpeza : 
+### Limpeza ###
 
 dates <- as.Date(scan( text = df$Posted.On, what = ""), format="%Y-%m-%d")
 dates
@@ -43,12 +47,86 @@ View(df)
 
 #a coluna floor também contém duas informações, irei separa-los
 
+library(stringr)
+library(dplyr)
 
-#pipeline para criação do aluguel média por cidade
+df$Total_floor <- sub(".*of ", "", df$Floor) 
+
+  
+df[df$Floor == "-2",] #verificando se os imóveis sem o andar informado foram coletados
+df[df$Floor == "-1",] #não houve problemas nos imóveis lower ou upper basement
+df[df$Floor == "0",] # houve um caso de um andar sendo salvo como zero, irei corrigir manualmente por ser único
+
+df <- df %>%   #pipeline para modificação
+  mutate( Total_floor = ifelse(Floor == '0', 1, Total_floor))
+
+df %>%    #não houve valores nulos na nova coluna
+    filter(is.na(Total_floor))
+
+df$Total_floor <- as.numeric(df$Total_floor)  #convertendo para númerico
+summary(df$Total_floor)
+
+df[is.na(df),]
+str(df)
+
+
+## plotando gráficos e informações sobre os dados ##
+
+#aluguel média por cidade
 Average_rent <- df %>%
   group_by(City) %>%
   summarise(mean(Rent))
 
 View(Average_rent)
-  
-library("dplyr")
+
+summary (size)
+
+library(ggplot2)
+
+
+count_floor <- table(df$Total_floor)
+View(count_floor)
+
+par(mar=c(3, 3, 3, 1))
+barplot(count_floor, ) #como esperado, imóveis com poucos andares são bem mais frequentes
+
+ggplot(as.data.frame(table(count_floor)), aes(x=count_floor, y= Freq))+
+  geom_bar(stat = 'identity')
+
+
+### Machine Learning ###
+# separação treinamento e teste #
+
+dim(df)
+
+set.seed(4)
+sample()
+
+samples_rows <- sample(1:length(df$BHK), length(df$BHK)*0.7)
+train = df[samples_rows,]  # pegando 70% para treino
+View(train)
+
+teste = df[-samples_rows,] # o restante é teste
+
+# correlação #
+
+pairs(df)
+
+?cor
+cor(df$Rent, y=df$Size, method="spearman")
+
+install.packages("pheatmap")
+library("pheatmap")
+
+pheatmap(houses_cor, display_numbers = TRUE)
+
+
+### criando modelos ##
+
+library(rpart)
+
+modelo <- rpart( Rent ~ .,
+                 data= train,
+                 control = rpart.control(cp=0))
+
+## Previsões e Resultados ##
