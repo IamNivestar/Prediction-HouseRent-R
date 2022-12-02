@@ -2,15 +2,15 @@
 #### https://github.com/IamNivestar/Prediction-HouseRent-R
 #### Predição de aluguel
 
-
-##carregando base de dados
+library(dplyr)
+                                  ##carregando base de dados
 
 setwd("C:/Users/Amaury/Desktop/Prediction-HouseRent-R")
 df <- read.csv("House_Rent_Dataset.csv", header = TRUE, encoding = "UTF-8")
 View(df)
 str(df)
 
-### Limpeza ###
+                                      ### Limpeza ###
 
 dates <- as.Date(scan( text = df$Posted.On, what = ""), format="%Y-%m-%d")
 dates
@@ -48,7 +48,6 @@ View(df)
 #a coluna floor também contém duas informações, irei separa-los
 
 library(stringr)
-library(dplyr)
 
 head(df$Floor)
 head(sub(".*of ", "", df$Floor)) #observando se o padrão foi corretamento obtido
@@ -88,15 +87,18 @@ df$Floor <- NULL  #não precisarei mais dessa coluna pois suas informações ja 
 df[is.na(df),]
 str(df)
 
-### salvando processamento ####
+                      ### salvando processamento ####
 
 write.table(df, file = "house_rent_processed.csv", row.names = F, sep = ",", fileEncoding = "UTF-8")
 
 
-### reload
+                           ### load new df
+
+setwd("C:/Users/Amaury/Desktop/Prediction-HouseRent-R")
 df <- read.csv("house_rent_processed.csv", header = TRUE, encoding = "UTF-8")
 
-## plotando gráficos e informações sobre os dados ##
+                    
+                      ## plotando gráficos e informações sobre os dados ##
 
 install.packages("gridExtra")
 library(gridExtra)
@@ -127,13 +129,20 @@ barplot(count_floor, ) #como esperado, imóveis com poucos andares são bem mais
 ggplot(as.data.frame(table(count_floor)), aes(x=count_floor, y= Freq))+
   geom_bar(stat = 'identity')
 
+barplot( table(df$Furnishing_status) )
+
+
+ggplot(as.data.frame(table(df$Furnishing_status)), aes(x=Furnishing_status, y= Freq))+
+  geom_bar(stat = 'identity')
+
 quantile(df$Rent)
 ?hist
 png(file="histogram_rent_90p.png", width=900, height=900, res=100)
 hist(df$Rent[ df$Rent < quantile(df$Rent, 0.90)], breaks = 5, labels = T, col='orange', main="Histogram of Rent", xlab =  "Rent")
 dev.off();
 
-### Machine Learning ###
+
+                                    ### Machine Learning ###
 
 # correlação #
 
@@ -164,11 +173,11 @@ df$Tenant_preferred <- as.factor(df$Tenant_preferred)
 df$Bathroom <- as.factor(df$Bathroom)
 df$Contact <- as.factor(df$Contact)
 
-str(df)
-summary(df$Area_locality)
-
 df <- df %>% 
   relocate(Rent, .after = Contact) #realocando aluguel para o final para facilitar a visualizacao
+
+str(df)
+summary(df$Area_locality)
 
 # separação treinamento e teste #
 
@@ -176,52 +185,124 @@ dim(df)
 
 set.seed(4) #definindo semente pois vou buscar valores aleatórios
 samples_rows <- sample(1:length(df$BHK), length(df$BHK)*0.7) # 70% para treino
-train = df[samples_rows,]  # dados de treino
-View(train)
+train_set = df[samples_rows,]  # dados de treino
+View(train_set )
 
-teste = df[-samples_rows,] # o restante é teste
+test_set = df[-samples_rows,] # o restante é teste
 
 
-### criando modelos ##
+                  ### modelo arvores de regressão ##
 
 library(rpart)
 
-modelo <- rpart( Rent ~ .,
-                 data= train,
+tree_model <- rpart( Rent ~ .,
+                 data= train_set,
                  control = rpart.control(cp=0))
 
 
 ## Previsões e Resultados ##
 
 
-teste$predicted <- predict(modelo, teste)
-select(teste, Rent, predicted)
+tree_model.training <- predict(tree_model, train_set)
+tree_model.testing <- predict(tree_model, test_set)
 
-# Avaliando resultados
-teste$porcent_error <- round(teste$predicted / teste$Rent, 2)
-teste$porcent_error <- abs(teste$porcent_error-1)
+plot(train_set$Rent, tree_model.training, col = "blue")
+plot(test_set$Rent, tree_model.testing, col = "green")
 
-Error_sum <- summary(teste$porcent_error)
+
+mae(df$Rest, tree_model.testing) #Mean Absolute Error
+
+summary(tree_model)
+
+#analisando correlação 
+cor_train <- cor(train_set$Rent, tree_model.training)
+cor_test <- cor(test_set$Rent, tree_model.testing)
+cat(cor_train, cor_test)
+cat(cor_train^2, cor_test^2)
+
+
+test_set$predicted <- tree_model.testing
+test_set$porcent_error <- round(test_set$predicted / test_set$Rent, 2)
+test_set$porcent_error <- abs(test_set$porcent_error-1)
+
+Error_sum <- summary(test_set$porcent_error)
 Error_sum
 
-# segundo modelo #
+                          # segundo modelo - linear regression #
+
+
+library(caret)
 
 new_df <- data.frame(df)
 
 samples_rows <- sample(1:length(new_df$BHK), length(new_df$BHK)*0.7) # 70% para treino
-train = new_df[samples_rows,]  # dados de treino
-teste = new_df[-samples_rows,] # o restante é teste
+train_set = new_df[samples_rows,]  # dados de treino
+test_set = new_df[-samples_rows,] # o restante é teste
 
-modelo <- rpart( Rent ~ .,
-                 data= train,
-                 control = rpart.control(cp=0))
+lm_model <- train(Rent ~ ., data = train_set,
+               method = 'lm',
+               )
 
-teste$predicted <- predict(modelo, teste)
-select(teste, Rent, predicted)
+#lm_model <- lm( Rent ~ ., data= train)
+summary(lm_model)
 
-teste$porcent_error <- round(teste$predicted / teste$Rent, 2)
-teste$porcent_error <- abs(teste$porcent_error-1)
-Error_sum2 <- summary(teste$porcent_error)
+lm_model.training <-predict(lm_model, train_set)
+lm_model.testing <- predict(lm_model, test_set)
 
-Error_sum
+plot(train_set$Rent, lm_model.training, col = "blue")
+plot(test_set$Rent, lm_model.testing, col = "red")
+
+cor_train <- cor(train_set$Rent, lm_model.training)
+cor_test <- cor(test_set$Rent, lm_model.testing)
+cat(cor_train, cor_test)
+cat(cor_train^2, cor_test^2)
+
+test_set$predicted <- lm_model.testing
+test_set$porcent_error <- round(test_set$predicted / test_set$Rent, 2)
+test_set$porcent_error <- abs(test_set$porcent_error-1)
+Error_sum2 <- summary(test_set$porcent_error)
+
+cat(Error_sum, Error_sum2)
+
+                      #  terceiro modelo - Gradient Boosting Regression ##
+
+library(gbm)
+
+new_df <- data.frame(df)
+new_df$Area_locality = as.numeric(factor(new_df$Area_locality))
+
+str(new_df)
+
+samples_rows <- sample(1:length(new_df$BHK), length(new_df$BHK)*0.7) # 70% para treino
+train_set = new_df[samples_rows,]  # dados de treino
+test_set = new_df[-samples_rows,] # o restante é teste
+
+gbm_model <- gbm(Rent ~ ., data = train_set,
+                 distribution = "gaussian",
+                 cv.folds = 10,
+                 shrinkage = .01,
+                 n.minobsinnode = 10,
+                 n.trees = 500)
+
+
+gbm_model.training <-predict(gbm_model, train_set)
+gbm_model.testing <- predict(gbm_model, test_set)
+
+plot(train_set$Rent, gbm_model.training, col = "blue")
+plot(test_set$Rent, gbm_model.testing, col = "red")
+
+MAE(new_df$Rent, predict(gbm_model))
+RMSE(new_df$Rent, predict(gbm_model))
+
+cor_train <- cor(train_set$Rent, gbm_model.training)
+cor_test <- cor(test_set$Rent, gbm_model.testing)
+cat(cor_train, cor_test)
+cat(cor_train^2, cor_test^2) # R2 Score
+
+test_set$predicted <- gbm_model.testing
+test_set$porcent_error <- round(test_set$predicted / test_set$Rent, 2)
+test_set$porcent_error <- abs(test_set$porcent_error-1)
+Error_sum2 <- summary(test_set$porcent_error)
 Error_sum2
+
+
