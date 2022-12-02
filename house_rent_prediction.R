@@ -97,6 +97,9 @@ write.table(df, file = "house_rent_processed.csv", row.names = F, sep = ",", fil
 setwd("C:/Users/Amaury/Desktop/Prediction-HouseRent-R")
 df <- read.csv("house_rent_processed.csv", header = TRUE, encoding = "UTF-8")
 
+
+# percentil 90# preco
+aluguel_90p <- quantile(df$Rent, 0.9)
                     
                       ## plotando gráficos e informações sobre os dados ##
 
@@ -125,20 +128,31 @@ View(count_floor)
 
 par(mar=c(3, 3, 3, 1)) #customizando barplot
 barplot(count_floor, ) #como esperado, imóveis com poucos andares são bem mais frequentes
-
-ggplot(as.data.frame(table(count_floor)), aes(x=count_floor, y= Freq))+
+ 
+ggplot(as.data.frame(table(count_floor)), aes(x=count_floor, y= Freq ))+
   geom_bar(stat = 'identity')
 
-barplot( table(df$Furnishing_status) )
+barplot( table(df$Furnishing_status), col = c("#E69F00", "#56B4E9", "#009E73") )
 
+boxplot(df$Rent, horizontal=TRUE, col='steelblue') 
+# remover o outlier de 3500000
+
+boxplot(df$Rent[df$Rent < 3500000], horizontal=TRUE, col='steelblue') 
+# como é possível observar o dados possuem muitos poucas casas com valores muito altos, isso prejudica
+# o modelo e a análise de distribuição.
+
+boxplot(df$Rent[df$Rent <  aluguel_90p], horizontal=TRUE, col='steelblue') 
+
+ggplot(df[df$Rent < aluguel_90p,], aes(x=Area_type, y=Rent, fill=Area_type)) + 
+  geom_boxplot( )
 
 ggplot(as.data.frame(table(df$Furnishing_status)), aes(x=Furnishing_status, y= Freq))+
   geom_bar(stat = 'identity')
 
 quantile(df$Rent)
 ?hist
-png(file="histogram_rent_90p.png", width=900, height=900, res=100)
-hist(df$Rent[ df$Rent < quantile(df$Rent, 0.90)], breaks = 5, labels = T, col='orange', main="Histogram of Rent", xlab =  "Rent")
+png(file="plots/histogram_rent_90p.png", width=900, height=900, res=100)
+hist(df$Rent[ df$Rent < aluguel_90p], breaks = 5, labels = T, col='orange', main="Histogram of Rent", xlab =  "Rent")
 dev.off();
 
 
